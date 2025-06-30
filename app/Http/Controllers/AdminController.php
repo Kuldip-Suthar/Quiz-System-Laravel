@@ -8,30 +8,35 @@ use App\Models\Mcq;
 use App\Models\Quiz;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Session;
+use Illuminate\Support\Facades\URL;
 
 class AdminController extends Controller
 {
+
     function login(Request $request)
     {
         $validation = $request->validate([
             'name' => 'required',
-            'password' => 'required'
+            'password' => 'required',
         ]);
 
         $admin = Admin::where([
             'name' => $request->name,
-            'password' => $request->password
+            'password' => $request->password,
         ])->first();
 
         if ($admin) {
             Session::put('admin', $admin);
             return redirect('dashboard');
         } else {
-            $validation = $request->validate([
-                'user' => 'required',
-            ], [
-                'user.required' => 'User does not exist!'
-            ]);
+            $validation = $request->validate(
+                [
+                    'user' => 'required',
+                ],
+                [
+                    'user.required' => 'User does not exist!',
+                ],
+            );
         }
     }
 
@@ -44,7 +49,6 @@ class AdminController extends Controller
             return redirect('admin-login');
         }
     }
-
 
     function categories()
     {
@@ -63,18 +67,20 @@ class AdminController extends Controller
         return redirect('admin-login');
     }
 
-
     function addCategory(Request $request)
     {
-        $validation = $request->validate([
-            'name' => 'required | min:3 | unique:categories,name'
-        ], [
-            'name.required' => 'Category name is required!',
-            'name.min' => 'Category name must be at least 3 characters!'
-        ]);
+        $validation = $request->validate(
+            [
+                'name' => 'required | min:3 | unique:categories,name',
+            ],
+            [
+                'name.required' => 'Category name is required!',
+                'name.min' => 'Category name must be at least 3 characters!',
+            ],
+        );
 
         $admin = Session::get('admin');
-        $category = new Category;
+        $category = new Category();
         $category->name = $request->name;
         $category->creator = $admin->name;
         if ($category->save()) {
@@ -102,6 +108,7 @@ class AdminController extends Controller
     {
         $categories = Category::get();
         $admin = Session::get('admin');
+        $totalMcq = 0;
         if ($admin) {
             $quizName = $request->name;
             $category = $request->category;
@@ -112,12 +119,25 @@ class AdminController extends Controller
                 if ($quiz->save()) {
                     Session::put('quizDetails', $quiz);
                 }
+            } else {
+                $quiz = Session::get('quizDetails');
+                $totalMcq = $quiz && Mcq::where('quiz_id', $quiz->id)->count();
             }
-            return view('add-quiz', ['admin' => $admin->name, 'categories' => $categories]);
+            return view('add-quiz', ['admin' => $admin->name, 'categories' => $categories, 'totalMcq' => $totalMcq]);
         }
     }
 
-    function addMCQs(Request $request){
+    function addMCQs(Request $request)
+    {
+        $request->validate([
+            'question' => 'required | min:5',
+            'a' => 'required',
+            'b' => 'required',
+            'c' => 'required',
+            'd' => 'required',
+            'correct_ans' => 'required',
+        ]);
+
         $quiz = Session::get('quizDetails');
         $admin = Session::get('admin');
         $mcq = new Mcq();
@@ -132,13 +152,39 @@ class AdminController extends Controller
         $mcq->quiz_id = $quiz->id;
         $mcq->category_id = $quiz->category_id;
 
-        if($mcq->save()){
-            if($request->add_more){
-                return redirect()->url()->previous();
-            }else{
+        if ($mcq->save()) {
+            if ($request->add_more) {
+                return redirect(URL::previous());
+            } else {
                 Session::forget('quizDetails');
-                return redirect('add-quiz');  
+                return redirect('add-quiz');
             }
         }
+    }
+
+    function  showmcqs($id) 
+    {
+        $admin = Session::get('admin');
+        $quiz = Session::get('quizDetails');
+        if ($quiz) {
+            $mcqs = Mcq::where('quiz_id', $quiz->id)->get();
+            return view('show-mcqs', ['admin' => $admin, 'mcqs' => $mcqs]);
+        } else {
+            $mcqs = Mcq::where('quiz_id', $id)->get();
+            return view('show-mcqs', ['admin' => $admin, 'mcqs' => $mcqs]);
+        }
+    }
+
+    function showQuiz($id, $category)
+    {
+        $quiz = Quiz::where('category_id', $id)->get();
+        $admin = Session::get('admin');
+        return view('show-quiz', ['quiz' => $quiz, 'admin' => $admin->name, 'category' => $category]);
+    }
+
+    function finish()
+    {
+        Session::forget('quizDetails');
+        return redirect('add-quiz');
     }
 }
